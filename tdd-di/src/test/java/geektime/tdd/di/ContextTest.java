@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class ContainerTest {
+public class ContextTest {
 
     private Context context;
 
@@ -27,7 +27,6 @@ public class ContainerTest {
         // TODO : instance
         @Test
         public void should_bind_type_to_a_specific_instance() {
-            Context context = new Context();
             Component instance = new Component() {};
             context.bind(Component.class, instance);
             assertSame(instance, context.get(Component.class).orElseThrow(DependencyNotFoundException::new));
@@ -46,8 +45,6 @@ public class ContainerTest {
             // TODO： No args Constructor
             @Test
             public void should_bind_type_to_a_class_with_default_constructor() {
-                Context context = new Context();
-
                 context.bind(Component.class, ComponentWithDefaultConstructor.class);
                 Component component = context.get(Component.class).orElseThrow(DependencyNotFoundException::new);
                 assertNotNull(component);
