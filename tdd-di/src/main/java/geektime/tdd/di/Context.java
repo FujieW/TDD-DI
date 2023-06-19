@@ -25,17 +25,38 @@ public class Context {
     void bind(Class<Type> type, Class<Implementation> implementation) {
         Constructor<Implementation> injectConstructor = getInjectConstructor(implementation);
 
-        providers.put(type, (Provider<Type>)() -> {
+        providers.put(type, new ConstructorInjectionProvider<>(injectConstructor));
+    }
+
+    class ConstructorInjectionProvider<Type> implements Provider<Type>{
+        private Constructor<Type> injectConstructor;
+
+        private boolean constructing = false;
+
+        public ConstructorInjectionProvider(Constructor<Type> injectConstructor) {
+            this.injectConstructor = injectConstructor;
+        }
+
+        @Override
+        public Type get() {
             try {
+                if (constructing) {
+                    throw new CyclicDependenciesFoundException();
+                }
+                constructing = true;
+                // 这里是一个递归，处理依赖传递的情况
                 Object[] dependencies = Arrays.stream(injectConstructor.getParameters())
-                    .map(p -> get(p.getType()).orElseThrow(DependencyNotFoundException::new))
+                    .map(p -> Context.this.get(p.getType()).orElseThrow(DependencyNotFoundException::new))
                     .toArray(Object[]::new);
-                return (Type)injectConstructor.newInstance(dependencies);
+                return injectConstructor.newInstance(dependencies);
             } catch (InvocationTargetException | InstantiationException | IllegalAccessException e) {
                 throw new RuntimeException(e);
+            } finally {
+                constructing = false;
             }
-        });
+        }
     }
+
 
     private static <Type> Constructor<Type> getInjectConstructor(Class<Type> implementation) {
 

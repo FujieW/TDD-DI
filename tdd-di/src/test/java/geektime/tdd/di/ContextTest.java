@@ -122,6 +122,31 @@ public class ContextTest {
                     context.get(Dependency.class);
                 });
             }
+
+            // TODO : A->B->C->A
+            @Test
+            public void should_throw_exception_if_transitive_cyclic_dependencies() {
+                context.bind(Component.class, ComponentWithInjectConstructor.class);
+                context.bind(Dependency.class, DependencyB.class);
+                context.bind(AnotherDependency.class, DependencyC.class);
+                context.bind(Component.class, ComponentWithInjectConstructor.class);
+
+                assertThrows(CyclicDependenciesFoundException.class, () -> {
+                    context.get(Component.class);
+                });
+
+                assertThrows(CyclicDependenciesFoundException.class, () -> {
+                    context.get(Dependency.class);
+                });
+
+                assertThrows(CyclicDependenciesFoundException.class, () -> {
+                    context.get(AnotherDependency.class);
+                });
+
+                assertThrows(CyclicDependenciesFoundException.class, () -> {
+                    context.get(Component.class);
+                });
+            }
         }
 
         @Nested
@@ -145,6 +170,14 @@ public class ContextTest {
 }
 
 interface Component {
+
+}
+
+interface Dependency {
+
+}
+
+interface AnotherDependency {
 
 }
 
@@ -172,9 +205,7 @@ class ComponentWithDefaultConstructor implements Component {
     }
 }
 
-interface Dependency {
 
-}
 
 class DependencyWithInjectorConstructor implements Dependency {
     private String dependency;
@@ -210,3 +241,27 @@ class DependencyDependentOnComponent implements Dependency {
         this.component = component;
     }
 }
+
+class DependencyB implements Dependency {
+    private AnotherDependency dependencyC;
+
+    @Inject
+
+    public DependencyB(AnotherDependency dependencyC) {
+        this.dependencyC = dependencyC;
+    }
+}
+
+class DependencyC implements AnotherDependency {
+    private Component componentA;
+
+    @Inject
+    public DependencyC(Component componentA) {
+        this.componentA = componentA;
+    }
+}
+
+
+
+
+
