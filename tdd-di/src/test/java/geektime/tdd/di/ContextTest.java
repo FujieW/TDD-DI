@@ -1,6 +1,10 @@
 package geektime.tdd.di;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +33,7 @@ public class ContextTest {
         public void should_bind_type_to_a_specific_instance() {
             Component instance = new Component() {};
             context.bind(Component.class, instance);
-            assertSame(instance, context.get(Component.class).orElseThrow(DependencyNotFoundException::new));
+            assertSame(instance, context.get(Component.class).get());
         }
 
         // TODO ： abstract class
@@ -46,7 +50,7 @@ public class ContextTest {
             @Test
             public void should_bind_type_to_a_class_with_default_constructor() {
                 context.bind(Component.class, ComponentWithDefaultConstructor.class);
-                Component component = context.get(Component.class).orElseThrow(DependencyNotFoundException::new);
+                Component component = context.get(Component.class).get();
                 assertNotNull(component);
                 assertTrue(component instanceof ComponentWithDefaultConstructor);
 
@@ -60,7 +64,7 @@ public class ContextTest {
                 context.bind(Component.class, ComponentWithInjectConstructor.class);
                 context.bind(Dependency.class, dependency);
 
-                Component component = context.get(Component.class).orElseThrow(DependencyNotFoundException::new);
+                Component component = context.get(Component.class).get();
                 assertNotNull(component);
                 assertSame(dependency, ((ComponentWithInjectConstructor)component).getDependency());
             }
@@ -72,7 +76,7 @@ public class ContextTest {
                 context.bind(Dependency.class, DependencyWithInjectorConstructor.class);
                 context.bind(String.class, "indirect dependency");
 
-                Component instance = context.get(Component.class).orElseThrow(DependencyNotFoundException::new);
+                Component instance = context.get(Component.class).get();
                 assertNotNull(instance);
 
                 Dependency dependency = ((ComponentWithInjectConstructor)instance).getDependency();
@@ -92,9 +96,10 @@ public class ContextTest {
                     context.bind(Component.class, ComponentWithMultiInjectConstructor.class);
                 });
             }
+
             // TODO: no default constructor and inject constructor
             @Test
-            public void should_throw_exception_if_now_inject_nor_default_constructors() {
+            public void should_throw_exception_if_no_inject_nor_default_constructors() {
                 assertThrows(IllegalComponentException.class, () -> {
                     context.bind(Component.class, ComponentWithInjectNorDefaultConstructor.class);
                 });
@@ -104,9 +109,23 @@ public class ContextTest {
             @Test
             public void should_throw_exception_if_dependency_not_found() {
                 context.bind(Component.class, ComponentWithInjectConstructor.class);
-                assertThrows(DependencyNotFoundException.class, ()->{
-                    context.get(Component.class).orElseThrow(DependencyNotFoundException::new);
-                });
+                DependencyNotFoundException exception = assertThrows(DependencyNotFoundException.class,
+                    () -> context.get(Component.class).get());
+
+                assertEquals(Dependency.class, exception.getDependency());
+                assertEquals(Component.class, exception.getComponent());
+            }
+
+            @Test
+            public void should_throw_exception_if_transitive_dependency_not_found() {
+                context.bind(Component.class, ComponentWithInjectConstructor.class);
+                context.bind(Dependency.class, DependencyWithInjectorConstructor.class);
+                // context.bind(String.class, "indirect dependency");
+                DependencyNotFoundException exception = assertThrows(DependencyNotFoundException.class,
+                    () -> context.get(Component.class).get());
+
+                assertEquals(String.class, exception.getDependency());
+                assertEquals(Dependency.class, exception.getComponent());
             }
 
             @Test
@@ -114,13 +133,15 @@ public class ContextTest {
                 context.bind(Component.class, ComponentWithInjectConstructor.class);
                 context.bind(Dependency.class, DependencyDependentOnComponent.class);
 
-                assertThrows(CyclicDependenciesFoundException.class, () -> {
-                    context.get(Component.class);
-                });
+                CyclicDependenciesFoundException exception = assertThrows(
+                    CyclicDependenciesFoundException.class, () -> {
+                        context.get(Component.class);
+                    });
 
-                assertThrows(CyclicDependenciesFoundException.class, () -> {
-                    context.get(Dependency.class);
-                });
+                Set<Class<?>> classes = exception.getComponents();
+                assertEquals(2, classes.size());
+                assertTrue(classes.contains(Component.class));
+                assertTrue(classes.contains(Dependency.class));
             }
 
             // TODO : A->B->C->A
@@ -131,21 +152,16 @@ public class ContextTest {
                 context.bind(AnotherDependency.class, DependencyC.class);
                 context.bind(Component.class, ComponentWithInjectConstructor.class);
 
-                assertThrows(CyclicDependenciesFoundException.class, () -> {
-                    context.get(Component.class);
-                });
+                CyclicDependenciesFoundException exception = assertThrows(
+                    CyclicDependenciesFoundException.class, () -> {
+                        context.get(Component.class);
+                    });
 
-                assertThrows(CyclicDependenciesFoundException.class, () -> {
-                    context.get(Dependency.class);
-                });
-
-                assertThrows(CyclicDependenciesFoundException.class, () -> {
-                    context.get(AnotherDependency.class);
-                });
-
-                assertThrows(CyclicDependenciesFoundException.class, () -> {
-                    context.get(Component.class);
-                });
+                Set<Class<?>> components = exception.getComponents();
+                assertEquals(3, components.size());
+                assertTrue(components.contains(Component.class));
+                assertTrue(components.contains(Dependency.class));
+                assertTrue(components.contains(AnotherDependency.class));
             }
         }
 
@@ -181,7 +197,7 @@ interface AnotherDependency {
 
 }
 
-class ComponentWithMultiInjectConstructor implements Component{
+class ComponentWithMultiInjectConstructor implements Component {
     @Inject
     public ComponentWithMultiInjectConstructor(String name, String value) {
 
@@ -193,7 +209,7 @@ class ComponentWithMultiInjectConstructor implements Component{
     }
 }
 
-class ComponentWithInjectNorDefaultConstructor implements Component{
+class ComponentWithInjectNorDefaultConstructor implements Component {
 
     public ComponentWithInjectNorDefaultConstructor(String name, String value) {
 
@@ -204,8 +220,6 @@ class ComponentWithDefaultConstructor implements Component {
     public ComponentWithDefaultConstructor() {
     }
 }
-
-
 
 class DependencyWithInjectorConstructor implements Dependency {
     private String dependency;
@@ -220,7 +234,7 @@ class DependencyWithInjectorConstructor implements Dependency {
     }
 }
 
-class ComponentWithInjectConstructor implements Component{
+class ComponentWithInjectConstructor implements Component {
     private Dependency dependency;
 
     @Inject
